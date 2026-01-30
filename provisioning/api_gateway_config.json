@@ -1,0 +1,190 @@
+{
+  "displayName": "AtlasAPIGateway",
+  "compartmentId": "<your_compartment_ocid>",
+  "endpointType": "PUBLIC",
+  "subnetId": "<your_public_subnet_ocid>",
+  "deployments": [
+    {
+      "displayName": "AtlasFusionProxy",
+      "pathPrefix": "/fusion",
+      "specification": {
+        "requestPolicies": {
+          "authentication": {
+            "type": "JWT_AUTHENTICATION",
+            "tokenHeader": "Authorization",
+            "tokenAuthScheme": "Bearer",
+            "isAnonymousAccessAllowed": false,
+            "issuers": ["https://identity.oraclecloud.com/"],
+            "audiences": ["atlas-api"],
+            "publicKeys": {
+              "type": "REMOTE_JWKS",
+              "uri": "https://identity.oraclecloud.com/.well-known/jwks.json",
+              "maxCacheDurationInHours": 24
+            }
+          },
+          "rateLimiting": {
+            "rateInRequestsPerSecond": 10,
+            "rateKey": "CLIENT_IP"
+          },
+          "cors": {
+            "allowedOrigins": ["https://atlas.example.com"],
+            "allowedMethods": ["GET", "POST"],
+            "allowedHeaders": ["Authorization", "Content-Type"],
+            "isAllowCredentialsEnabled": true,
+            "maxAgeInSeconds": 3600
+          }
+        },
+        "loggingPolicies": {
+          "accessLog": {
+            "isEnabled": true
+          },
+          "executionLog": {
+            "isEnabled": true,
+            "logLevel": "INFO"
+          }
+        },
+        "routes": [
+          {
+            "path": "/hcm/workers",
+            "methods": ["GET"],
+            "backend": {
+              "type": "HTTP_BACKEND",
+              "url": "https://<your_fusion_host>/hcmRestApi/resources/11.13.18.05/workers",
+              "connectTimeoutInSeconds": 30,
+              "readTimeoutInSeconds": 60,
+              "sendTimeoutInSeconds": 60
+            },
+            "requestPolicies": {
+              "headerTransformations": {
+                "setHeaders": {
+                  "items": [
+                    {
+                      "name": "X-Atlas-Request-Id",
+                      "values": ["${request.headers.x-request-id}"]
+                    }
+                  ]
+                }
+              },
+              "authorization": {
+                "type": "ANY_OF",
+                "allowedScope": ["hcm:read"]
+              }
+            }
+          },
+          {
+            "path": "/hcm/departments",
+            "methods": ["GET"],
+            "backend": {
+              "type": "HTTP_BACKEND",
+              "url": "https://<your_fusion_host>/hcmRestApi/resources/11.13.18.05/departments",
+              "connectTimeoutInSeconds": 30,
+              "readTimeoutInSeconds": 60,
+              "sendTimeoutInSeconds": 60
+            },
+            "requestPolicies": {
+              "authorization": {
+                "type": "ANY_OF",
+                "allowedScope": ["hcm:read"]
+              }
+            }
+          },
+          {
+            "path": "/procurement/purchaseOrders",
+            "methods": ["GET"],
+            "backend": {
+              "type": "HTTP_BACKEND",
+              "url": "https://<your_fusion_host>/fscmRestApi/resources/11.13.18.05/purchaseOrders",
+              "connectTimeoutInSeconds": 30,
+              "readTimeoutInSeconds": 60,
+              "sendTimeoutInSeconds": 60
+            },
+            "requestPolicies": {
+              "authorization": {
+                "type": "ANY_OF",
+                "allowedScope": ["procurement:read"]
+              }
+            }
+          },
+          {
+            "path": "/financials/invoices",
+            "methods": ["GET"],
+            "backend": {
+              "type": "HTTP_BACKEND",
+              "url": "https://<your_fusion_host>/fscmRestApi/resources/11.13.18.05/invoices",
+              "connectTimeoutInSeconds": 30,
+              "readTimeoutInSeconds": 60,
+              "sendTimeoutInSeconds": 60
+            },
+            "requestPolicies": {
+              "authorization": {
+                "type": "ANY_OF",
+                "allowedScope": ["financials:read"]
+              }
+            }
+          },
+          {
+            "path": "/financials/suppliers",
+            "methods": ["GET"],
+            "backend": {
+              "type": "HTTP_BACKEND",
+              "url": "https://<your_fusion_host>/fscmRestApi/resources/11.13.18.05/suppliers",
+              "connectTimeoutInSeconds": 30,
+              "readTimeoutInSeconds": 60,
+              "sendTimeoutInSeconds": 60
+            },
+            "requestPolicies": {
+              "authorization": {
+                "type": "ANY_OF",
+                "allowedScope": ["financials:read"]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "displayName": "AtlasGenAIProxy",
+      "pathPrefix": "/ai",
+      "specification": {
+        "requestPolicies": {
+          "authentication": {
+            "type": "JWT_AUTHENTICATION",
+            "tokenHeader": "Authorization",
+            "tokenAuthScheme": "Bearer",
+            "isAnonymousAccessAllowed": false,
+            "issuers": ["https://identity.oraclecloud.com/"],
+            "audiences": ["atlas-api"],
+            "publicKeys": {
+              "type": "REMOTE_JWKS",
+              "uri": "https://identity.oraclecloud.com/.well-known/jwks.json",
+              "maxCacheDurationInHours": 24
+            }
+          },
+          "rateLimiting": {
+            "rateInRequestsPerSecond": 5,
+            "rateKey": "CLIENT_IP"
+          }
+        },
+        "routes": [
+          {
+            "path": "/chat",
+            "methods": ["POST"],
+            "backend": {
+              "type": "HTTP_BACKEND",
+              "url": "https://inference.generativeai.<region>.oci.oraclecloud.com/20231130/actions/chat",
+              "connectTimeoutInSeconds": 60,
+              "readTimeoutInSeconds": 120,
+              "sendTimeoutInSeconds": 60
+            },
+            "requestPolicies": {
+              "authorization": {
+                "type": "ANY_OF",
+                "allowedScope": ["genai:chat"]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

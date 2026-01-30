@@ -1,0 +1,24 @@
+graph TD
+    subgraph "User Interface"
+        A["Oracle APEX Dashboard"] --> B{Command Bar}
+    end
+
+    subgraph "OCI API Gateway"
+        B --> C{API Gateway}
+    end
+
+    subgraph "Intelligence & Integration Layer"
+        C --> D["OCI Generative AI Service"]
+        C --> E["OCI Integration Cloud"]
+    end
+
+    subgraph "Data & Storage Layer"
+        D --> F{AI Vector Search}
+        E --> G["Oracle Fusion REST APIs"]
+        F --> H["Autonomous Database (ATP)"]
+        E --> H
+        H --> I["OCI Object Storage"]
+    end
+
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style G fill:#bbf,stroke:#333,stroke-width:2px

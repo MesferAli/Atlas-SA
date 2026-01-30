@@ -1,0 +1,105 @@
+{
+  "displayName": "AtlasFusionProxy",
+  "pathPrefix": "/atlas/v1",
+  "specification": {
+    "requestPolicies": {
+      "authentication": {
+        "type": "CUSTOM_AUTHENTICATION",
+        "functionId": null,
+        "isAnonymousAccessAllowed": false,
+        "tokenHeader": "Authorization"
+      },
+      "rateLimiting": {
+        "rateInRequestsPerSecond": 10,
+        "rateKey": "CLIENT_IP"
+      },
+      "cors": {
+        "allowedOrigins": ["*"],
+        "allowedMethods": ["GET", "POST", "OPTIONS"],
+        "allowedHeaders": ["Authorization", "Content-Type", "X-Atlas-Request-Id"],
+        "isAllowCredentialsEnabled": false,
+        "maxAgeInSeconds": 3600
+      }
+    },
+    "loggingPolicies": {
+      "accessLog": {
+        "isEnabled": true
+      },
+      "executionLog": {
+        "isEnabled": true,
+        "logLevel": "INFO"
+      }
+    },
+    "routes": [
+      {
+        "path": "/health",
+        "methods": ["GET"],
+        "backend": {
+          "type": "STOCK_RESPONSE_BACKEND",
+          "status": 200,
+          "body": "{\"status\": \"healthy\", \"service\": \"Atlas API Gateway\", \"region\": \"me-riyadh-1\"}"
+        },
+        "requestPolicies": {
+          "authorization": {
+            "type": "ANONYMOUS"
+          }
+        }
+      },
+      {
+        "path": "/fusion/hcm/workers",
+        "methods": ["GET"],
+        "backend": {
+          "type": "HTTP_BACKEND",
+          "url": "${fusion_host}/hcmRestApi/resources/11.13.18.05/workers",
+          "connectTimeoutInSeconds": 30,
+          "readTimeoutInSeconds": 60,
+          "sendTimeoutInSeconds": 60
+        }
+      },
+      {
+        "path": "/fusion/hcm/departments",
+        "methods": ["GET"],
+        "backend": {
+          "type": "HTTP_BACKEND",
+          "url": "${fusion_host}/hcmRestApi/resources/11.13.18.05/departments",
+          "connectTimeoutInSeconds": 30,
+          "readTimeoutInSeconds": 60,
+          "sendTimeoutInSeconds": 60
+        }
+      },
+      {
+        "path": "/fusion/procurement/purchaseOrders",
+        "methods": ["GET"],
+        "backend": {
+          "type": "HTTP_BACKEND",
+          "url": "${fusion_host}/fscmRestApi/resources/11.13.18.05/purchaseOrders",
+          "connectTimeoutInSeconds": 30,
+          "readTimeoutInSeconds": 60,
+          "sendTimeoutInSeconds": 60
+        }
+      },
+      {
+        "path": "/fusion/financials/invoices",
+        "methods": ["GET"],
+        "backend": {
+          "type": "HTTP_BACKEND",
+          "url": "${fusion_host}/fscmRestApi/resources/11.13.18.05/invoices",
+          "connectTimeoutInSeconds": 30,
+          "readTimeoutInSeconds": 60,
+          "sendTimeoutInSeconds": 60
+        }
+      },
+      {
+        "path": "/fusion/financials/suppliers",
+        "methods": ["GET"],
+        "backend": {
+          "type": "HTTP_BACKEND",
+          "url": "${fusion_host}/fscmRestApi/resources/11.13.18.05/suppliers",
+          "connectTimeoutInSeconds": 30,
+          "readTimeoutInSeconds": 60,
+          "sendTimeoutInSeconds": 60
+        }
+      }
+    ]
+  }
+}
