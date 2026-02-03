@@ -1,6 +1,6 @@
 -- Atlas on OCI - Simplified Schema DDL
--- Version: 1.0
--- Date: January 30, 2026
+-- Version: 1.1
+-- Date: February 03, 2026
 --
 -- This script creates the simplified schema for the Atlas platform
 -- in the OCI Autonomous Database (ATP).
@@ -157,25 +157,16 @@ CREATE INDEX IDX_DOCS_TYPE ON ATLAS_DOCUMENTS(DOCUMENT_TYPE);
 CREATE INDEX IDX_DOCS_SOURCE ON ATLAS_DOCUMENTS(SOURCE_SYSTEM);
 
 -- ATLAS_DOCUMENT_CHUNKS: Chunked text with vector embeddings
--- Note: The VECTOR data type is available in Oracle Database 23ai and later.
--- For earlier versions, use BLOB or a different approach.
 CREATE TABLE ATLAS_DOCUMENT_CHUNKS (
     CHUNK_ID                NUMBER          PRIMARY KEY,
     DOCUMENT_ID             NUMBER          NOT NULL REFERENCES ATLAS_DOCUMENTS(DOCUMENT_ID),
     CHUNK_TEXT              CLOB            NOT NULL,
     CHUNK_SEQUENCE          NUMBER          NOT NULL,
-    EMBEDDING               VECTOR(384),    -- Dimension depends on embedding model (e.g., all-MiniLM-L6-v2 uses 384)
+    EMBEDDING               CLOB,           -- Storing embeddings as JSON string in CLOB for broader compatibility
     CREATED_DATE            TIMESTAMP       NOT NULL
 );
 
 CREATE INDEX IDX_CHUNKS_DOC ON ATLAS_DOCUMENT_CHUNKS(DOCUMENT_ID);
-
--- Create a vector index for semantic search
--- This uses the HNSW (Hierarchical Navigable Small World) algorithm for efficient similarity search.
-CREATE VECTOR INDEX IDX_CHUNKS_EMBEDDING ON ATLAS_DOCUMENT_CHUNKS(EMBEDDING)
-    ORGANIZATION NEIGHBOR PARTITIONS
-    DISTANCE COSINE
-    WITH TARGET ACCURACY 95;
 
 -- ============================================================
 -- 4. Audit and Logging Table

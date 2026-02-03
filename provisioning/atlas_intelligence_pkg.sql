@@ -3,6 +3,8 @@
 -- Purpose: Analyze Fusion data and generate proactive alerts
 -- ============================================================
 
+
+
 CREATE OR REPLACE PACKAGE ATLAS_INTELLIGENCE_PKG AS
     -- Main procedure to run all intelligence checks
     PROCEDURE GENERATE_PROACTIVE_ALERTS;
@@ -24,7 +26,7 @@ CREATE OR REPLACE PACKAGE BODY ATLAS_INTELLIGENCE_PKG AS
     -- ---------------------------------------------------------
     PROCEDURE GENERATE_PROACTIVE_ALERTS IS
     BEGIN
-        ATLAS_LOG_EVENT(
+        ATLAS_AUDIT_LOG_PKG.LOG_EVENT(
             p_event_type    => 'INTEL_RUN_START',
             p_resource_type => 'INTELLIGENCE',
             p_action        => 'GENERATE_ALERTS',
@@ -35,7 +37,7 @@ CREATE OR REPLACE PACKAGE BODY ATLAS_INTELLIGENCE_PKG AS
         CHECK_PO_STAGNATION;
         CHECK_HR_TRENDS;
 
-        ATLAS_LOG_EVENT(
+        ATLAS_AUDIT_LOG_PKG.LOG_EVENT(
             p_event_type    => 'INTEL_RUN_COMPLETE',
             p_resource_type => 'INTELLIGENCE',
             p_action        => 'GENERATE_ALERTS',
@@ -43,7 +45,7 @@ CREATE OR REPLACE PACKAGE BODY ATLAS_INTELLIGENCE_PKG AS
         );
     EXCEPTION
         WHEN OTHERS THEN
-            ATLAS_LOG_EVENT(
+            ATLAS_AUDIT_LOG_PKG.LOG_EVENT(
                 p_event_type    => 'INTEL_RUN_ERROR',
                 p_resource_type => 'INTELLIGENCE',
                 p_action        => 'GENERATE_ALERTS',
@@ -66,11 +68,11 @@ CREATE OR REPLACE PACKAGE BODY ATLAS_INTELLIGENCE_PKG AS
           AND DUE_DATE < SYSDATE;
 
         IF l_count > 0 THEN
-            INSERT INTO ATLAS_ALERTS (ALERT_TYPE, ALERT_MESSAGE, SEVERITY_LEVEL)
-            VALUES (
+            INSERT INTO ATLAS_ALERTS (ALERT_ID, ALERT_TYPE, ALERT_MESSAGE, SEVERITY_LEVEL)
+            VALUES (SEQ_ATLAS_ALERTS.NEXTVAL, 
                 'FINANCIAL',
                 'Detected ' || l_count || ' overdue invoices totaling ' || TO_CHAR(l_amount, '999,999,999.99') || ' SAR. Action required for cash flow management.',
-                CASE WHEN l_amount > 100000 THEN 'CRITICAL' ELSE 'WARNING' END
+                CASE WHEN l_amount > TO_NUMBER(ATLAS_CONFIG_PKG.GET_CRITICAL_INVOICE_THRESHOLD) THEN 'CRITICAL' ELSE 'WARNING' END
             );
         END IF;
     END CHECK_OVERDUE_INVOICES;
@@ -88,10 +90,10 @@ CREATE OR REPLACE PACKAGE BODY ATLAS_INTELLIGENCE_PKG AS
           AND LAST_SYNC_DATE < SYSTIMESTAMP - INTERVAL '7' DAY;
 
         IF l_count > 0 THEN
-            INSERT INTO ATLAS_ALERTS (ALERT_TYPE, ALERT_MESSAGE, SEVERITY_LEVEL)
-            VALUES (
+            INSERT INTO ATLAS_ALERTS (ALERT_ID, ALERT_TYPE, ALERT_MESSAGE, SEVERITY_LEVEL)
+            VALUES (SEQ_ATLAS_ALERTS.NEXTVAL, 
                 'OPERATIONAL',
-                l_count || ' Purchase Orders have been stagnant for over 7 days. Review supplier fulfillment status.',
+                l_count || ' Purchase Orders have been stagnant for over ' || ATLAS_CONFIG_PKG.GET_PO_STAGNANT_DAYS || ' days. Review supplier fulfillment status.',
                 'WARNING'
             );
         END IF;
@@ -109,9 +111,9 @@ CREATE OR REPLACE PACKAGE BODY ATLAS_INTELLIGENCE_PKG AS
         FROM ATLAS_EMPLOYEES
         WHERE ASSIGNMENT_STATUS = 'PENDING';
 
-        IF l_count > 5 THEN
-            INSERT INTO ATLAS_ALERTS (ALERT_TYPE, ALERT_MESSAGE, SEVERITY_LEVEL)
-            VALUES (
+        IF l_count > TO_NUMBER(ATLAS_CONFIG_PKG.GET_HR_PENDING_THRESHOLD) THEN
+            INSERT INTO ATLAS_ALERTS (ALERT_ID, ALERT_TYPE, ALERT_MESSAGE, SEVERITY_LEVEL)
+            VALUES (SEQ_ATLAS_ALERTS.NEXTVAL, 
                 'HR',
                 'High volume of pending employee assignments (' || l_count || '). Potential onboarding bottleneck detected.',
                 'INFO'
@@ -126,7 +128,7 @@ CREATE OR REPLACE PACKAGE BODY ATLAS_INTELLIGENCE_PKG AS
     BEGIN
         DELETE FROM ATLAS_ALERTS
         WHERE ALERT_STATUS = 'RESOLVED'
-          AND RESOLVED_DATE < SYSTIMESTAMP - p_days_to_keep;
+          AND RESOLVED_DATE < SYSTIMESTAMP - TO_NUMBER(ATLAS_CONFIG_PKG.GET_DAYS_TO_KEEP_RESOLVED_ALERTS);
         COMMIT;
     END PURGE_OLD_ALERTS;
 

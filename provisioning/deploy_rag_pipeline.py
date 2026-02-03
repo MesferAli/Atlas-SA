@@ -1,22 +1,67 @@
-#!/usr/bin/env python3
-"""
-Atlas on OCI - RAG Pipeline Deployment Script
-Deploys the RAG pipeline procedures and the validate_query function
-"""
-
 import oracledb
 import os
 import sys
+import config
 
-# Database connection parameters
-DB_USER = "ADMIN"
-DB_PASSWORD = "AtlasMZX#2026Secure!"
-DB_DSN = "atlasdb_high"
-WALLET_DIR = os.path.expanduser("~/atlas_wallet")
+# Database connection parameters from config.py
+DB_USER = config.DB_USER
+DB_PASSWORD = config.DB_PASSWORD
+DB_DSN = config.DB_DSN
+WALLET_DIR = os.path.expanduser(config.DB_WALLET_DIR)
+WALLET_PASSWORD = config.DB_WALLET_PASSWORD
 
-# PL/SQL procedures for the RAG pipeline
+# PL/SQL objects for the RAG pipeline and audit logging
 PLSQL_OBJECTS = [
-    # 1. Query Validation Function - MZX Security Mandate
+    # 1. ATLAS_AUDIT_LOG_PKG (Audit Logging Package)
+    ("PACKAGE", "ATLAS_AUDIT_LOG_PKG", """
+CREATE OR REPLACE PACKAGE ATLAS_AUDIT_LOG_PKG AS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    PROCEDURE LOG_EVENT(
+        p_event_type    IN VARCHAR2,
+        p_user_id       IN VARCHAR2 DEFAULT NULL,
+        p_client_ip     IN VARCHAR2 DEFAULT NULL,
+        p_resource_type IN VARCHAR2 DEFAULT NULL,
+        p_action        IN VARCHAR2 DEFAULT NULL,
+        p_details       IN CLOB DEFAULT NULL,
+        p_success       IN VARCHAR2 DEFAULT 'Y',
+        p_error_message IN VARCHAR2 DEFAULT NULL
+    );
+END ATLAS_AUDIT_LOG_PKG;
+/
+
+CREATE OR REPLACE PACKAGE BODY ATLAS_AUDIT_LOG_PKG AS
+    PROCEDURE LOG_EVENT(
+        p_event_type    IN VARCHAR2,
+        p_user_id       IN VARCHAR2 DEFAULT NULL,
+        p_client_ip     IN VARCHAR2 DEFAULT NULL,
+        p_resource_type IN VARCHAR2 DEFAULT NULL,
+        p_action        IN VARCHAR2 DEFAULT NULL,
+        p_details       IN CLOB DEFAULT NULL,
+        p_success       IN VARCHAR2 DEFAULT 'Y',
+        p_error_message IN VARCHAR2 DEFAULT NULL
+    )
+    IS
+    BEGIN
+        INSERT INTO ATLAS_AUDIT_LOG (
+            LOG_ID, EVENT_TYPE, USER_ID, CLIENT_IP, RESOURCE_TYPE,
+            ACTION, DETAILS, SUCCESS, ERROR_MESSAGE, CREATED_DATE
+        ) VALUES (
+            SEQ_ATLAS_AUDIT_LOG.NEXTVAL, p_event_type, p_user_id, p_client_ip,
+            p_resource_type, p_action, p_details, p_success, p_error_message, SYSTIMESTAMP
+        );
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+            ROLLBACK;
+            RAISE;
+    END LOG_EVENT;
+END ATLAS_AUDIT_LOG_PKG;
+/
+
+GRANT EXECUTE ON ATLAS_AUDIT_LOG_PKG TO PUBLIC;
+"""),
+
+    # 2. ATLAS_VALIDATE_QUERY (Query Validation Function - MZX Security Mandate)
     ("FUNCTION", "ATLAS_VALIDATE_QUERY", """
 CREATE OR REPLACE FUNCTION ATLAS_VALIDATE_QUERY(p_sql IN CLOB)
 RETURN VARCHAR2
@@ -32,7 +77,7 @@ BEGIN
     
     -- Check for forbidden keywords
     FOR i IN 1..l_forbidden_keywords.COUNT LOOP
-        IF REGEXP_LIKE(l_sql_upper, '(^|\\s|\\()' || l_forbidden_keywords(i) || '(\\s|\\(|$)') THEN
+        IF REGEXP_LIKE(l_sql_upper, '(^|\\s|\\()'||l_forbidden_keywords(i)||'(\\s|\\(|$)' ) THEN
             RETURN 'BLOCKED: Query contains forbidden keyword: ' || l_forbidden_keywords(i);
         END IF;
     END LOOP;
@@ -44,38 +89,11 @@ BEGIN
     
     RETURN 'VALID';
 END ATLAS_VALIDATE_QUERY;
+/
+GRANT EXECUTE ON ATLAS_VALIDATE_QUERY TO PUBLIC;
 """),
 
-    # 2. Audit Logging Procedure
-    ("PROCEDURE", "ATLAS_LOG_EVENT", """
-CREATE OR REPLACE PROCEDURE ATLAS_LOG_EVENT(
-    p_event_type    IN VARCHAR2,
-    p_user_id       IN VARCHAR2 DEFAULT NULL,
-    p_client_ip     IN VARCHAR2 DEFAULT NULL,
-    p_resource_type IN VARCHAR2 DEFAULT NULL,
-    p_action        IN VARCHAR2 DEFAULT NULL,
-    p_details       IN CLOB DEFAULT NULL,
-    p_success       IN VARCHAR2 DEFAULT 'Y',
-    p_error_message IN VARCHAR2 DEFAULT NULL
-)
-IS
-    PRAGMA AUTONOMOUS_TRANSACTION;
-BEGIN
-    INSERT INTO ATLAS_AUDIT_LOG (
-        LOG_ID, EVENT_TYPE, USER_ID, CLIENT_IP, RESOURCE_TYPE,
-        ACTION, DETAILS, SUCCESS, ERROR_MESSAGE, CREATED_DATE
-    ) VALUES (
-        SEQ_ATLAS_AUDIT_LOG.NEXTVAL, p_event_type, p_user_id, p_client_ip,
-        p_resource_type, p_action, p_details, p_success, p_error_message, SYSTIMESTAMP
-    );
-    COMMIT;
-EXCEPTION
-    WHEN OTHERS THEN
-        ROLLBACK;
-END ATLAS_LOG_EVENT;
-"""),
-
-    # 3. Schema Context Function for RAG
+    # 3. ATLAS_GET_SCHEMA_CONTEXT (Schema Context Function for RAG)
     ("FUNCTION", "ATLAS_GET_SCHEMA_CONTEXT", """
 CREATE OR REPLACE FUNCTION ATLAS_GET_SCHEMA_CONTEXT
 RETURN CLOB
@@ -113,9 +131,11 @@ BEGIN
     
     RETURN l_context;
 END ATLAS_GET_SCHEMA_CONTEXT;
+/
+GRANT EXECUTE ON ATLAS_GET_SCHEMA_CONTEXT TO PUBLIC;
 """),
 
-    # 4. Document Ingestion Procedure
+    # 4. ATLAS_INGEST_DOCUMENT (Document Ingestion Procedure)
     ("PROCEDURE", "ATLAS_INGEST_DOCUMENT", """
 CREATE OR REPLACE PROCEDURE ATLAS_INGEST_DOCUMENT(
     p_document_name       IN VARCHAR2,
@@ -164,7 +184,7 @@ BEGIN
     END LOOP;
 
     -- Log the ingestion
-    ATLAS_LOG_EVENT(
+    ATLAS_AUDIT_LOG_PKG.LOG_EVENT(
         p_event_type => 'DOCUMENT_INGESTED',
         p_user_id => USER,
         p_resource_type => 'DOCUMENT',
@@ -177,7 +197,7 @@ BEGIN
 EXCEPTION
     WHEN OTHERS THEN
         ROLLBACK;
-        ATLAS_LOG_EVENT(
+        ATLAS_AUDIT_LOG_PKG.LOG_EVENT(
             p_event_type => 'DOCUMENT_INGESTION_FAILED',
             p_user_id => USER,
             p_resource_type => 'DOCUMENT',
@@ -187,9 +207,11 @@ EXCEPTION
         );
         RAISE;
 END ATLAS_INGEST_DOCUMENT;
+/
+GRANT EXECUTE ON ATLAS_INGEST_DOCUMENT TO PUBLIC;
 """),
 
-    # 5. Safe Query Execution Function
+    # 5. ATLAS_EXECUTE_SAFE_QUERY (Safe Query Execution Function)
     ("FUNCTION", "ATLAS_EXECUTE_SAFE_QUERY", """
 CREATE OR REPLACE FUNCTION ATLAS_EXECUTE_SAFE_QUERY(
     p_sql     IN CLOB,
@@ -205,7 +227,7 @@ BEGIN
     
     IF l_validation != 'VALID' THEN
         -- Log blocked query
-        ATLAS_LOG_EVENT(
+        ATLAS_AUDIT_LOG_PKG.LOG_EVENT(
             p_event_type => 'QUERY_BLOCKED',
             p_user_id => p_user_id,
             p_resource_type => 'QUERY',
@@ -221,7 +243,7 @@ BEGIN
     OPEN l_cursor FOR p_sql;
     
     -- Log successful execution
-    ATLAS_LOG_EVENT(
+    ATLAS_AUDIT_LOG_PKG.LOG_EVENT(
         p_event_type => 'QUERY_EXECUTED',
         p_user_id => p_user_id,
         p_resource_type => 'QUERY',
@@ -234,7 +256,7 @@ BEGIN
 EXCEPTION
     WHEN OTHERS THEN
         IF l_validation = 'VALID' THEN
-            ATLAS_LOG_EVENT(
+            ATLAS_AUDIT_LOG_PKG.LOG_EVENT(
                 p_event_type => 'QUERY_ERROR',
                 p_user_id => p_user_id,
                 p_resource_type => 'QUERY',
@@ -246,9 +268,11 @@ EXCEPTION
         END IF;
         RAISE;
 END ATLAS_EXECUTE_SAFE_QUERY;
+/
+GRANT EXECUTE ON ATLAS_EXECUTE_SAFE_QUERY TO PUBLIC;
 """),
 
-    # 6. Proactive Alerts Function
+    # 6. ATLAS_GET_ALERTS (Proactive Alerts Function)
     ("FUNCTION", "ATLAS_GET_ALERTS", """
 CREATE OR REPLACE FUNCTION ATLAS_GET_ALERTS
 RETURN CLOB
@@ -306,6 +330,8 @@ BEGIN
     
     RETURN l_alerts;
 END ATLAS_GET_ALERTS;
+/
+GRANT EXECUTE ON ATLAS_GET_ALERTS TO PUBLIC;
 """),
 ]
 
@@ -322,7 +348,7 @@ def main():
             dsn=DB_DSN,
             config_dir=WALLET_DIR,
             wallet_location=WALLET_DIR,
-            wallet_password="WalletMZX#2026!"
+            wallet_password=WALLET_PASSWORD
         )
         print("✅ Connected successfully!")
         

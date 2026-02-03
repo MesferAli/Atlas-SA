@@ -7,16 +7,18 @@ Creates the APEX workspace and deploys the Atlas application
 import oracledb
 import os
 import sys
+import config
 
-# Database connection parameters
-DB_USER = "ADMIN"
-DB_PASSWORD = "AtlasMZX#2026Secure!"
-DB_DSN = "atlasdb_high"
-WALLET_DIR = os.path.expanduser("~/atlas_wallet")
+# Database connection parameters from config.py
+DB_USER = config.DB_USER
+DB_PASSWORD = config.DB_PASSWORD
+DB_DSN = config.DB_DSN
+WALLET_DIR = os.path.expanduser(config.DB_WALLET_DIR)
+WALLET_PASSWORD = config.DB_WALLET_PASSWORD
 
 # APEX URLs
-APEX_URL = "https://G05FA28D854C5E8-ATLASDB.adb.me-riyadh-1.oraclecloudapps.com/ords/apex"
-ORDS_URL = "https://G05FA28D854C5E8-ATLASDB.adb.me-riyadh-1.oraclecloudapps.com/ords/"
+APEX_URL = f"https://{config.DB_DSN.upper()}.adb.{config.OCI_REGION}.oraclecloudapps.com/ords/apex"
+ORDS_URL = f"https://{config.DB_DSN.upper()}.adb.{config.OCI_REGION}.oraclecloudapps.com/ords/"
 
 # APEX Workspace and Application Configuration
 WORKSPACE_NAME = "ATLAS"
@@ -38,47 +40,28 @@ def main():
             dsn=DB_DSN,
             config_dir=WALLET_DIR,
             wallet_location=WALLET_DIR,
-            wallet_password="WalletMZX#2026!"
+            wallet_password=WALLET_PASSWORD
         )
         print("✅ Connected successfully!")
         
         cursor = connection.cursor()
         
-        # Check if APEX is available
-        print("\n1. Checking APEX availability...")
-        cursor.execute("""
-            SELECT COUNT(*) FROM all_users WHERE username = 'APEX_230200'
-        """)
-        apex_exists = cursor.fetchone()[0]
-        
-        if apex_exists > 0:
-            print("   ✅ APEX is available in the database")
-        else:
-            # Check for other APEX versions
-            cursor.execute("""
-                SELECT username FROM all_users WHERE username LIKE 'APEX_%' ORDER BY username DESC
-            """)
-            apex_versions = cursor.fetchall()
-            if apex_versions:
-                print(f"   ✅ APEX version found: {apex_versions[0][0]}")
-            else:
-                print("   ⚠️  APEX not found - may need to be enabled")
-        
         # Create APEX workspace
-        print("\n2. Creating APEX Workspace...")
+        print("\n1. Creating APEX Workspace...")
         try:
             cursor.execute("""
                 BEGIN
                     APEX_INSTANCE_ADMIN.ADD_WORKSPACE(
                         p_workspace_id   => :workspace_id,
                         p_workspace      => :workspace_name,
-                        p_primary_schema => 'ADMIN'
+                        p_primary_schema => :db_user
                     );
                     COMMIT;
                 END;
             """, {
                 'workspace_id': WORKSPACE_ID,
-                'workspace_name': WORKSPACE_NAME
+                'workspace_name': WORKSPACE_NAME,
+                'db_user': DB_USER
             })
             print(f"   ✅ Workspace '{WORKSPACE_NAME}' created")
         except oracledb.DatabaseError as e:
@@ -89,7 +72,7 @@ def main():
                 print(f"   ❌ Error creating workspace: {error}")
         
         # Create APEX admin user for the workspace
-        print("\n3. Creating APEX Admin User...")
+        print("\n2. Creating APEX Admin User...")
         try:
             cursor.execute("""
                 BEGIN
@@ -98,13 +81,13 @@ def main():
                         p_email_address                => 'admin@atlas.local',
                         p_web_password                 => 'AtlasAdmin#2026!',
                         p_developer_privs              => 'ADMIN:CREATE:DATA_LOADER:EDIT:HELP:MONITOR:SQL',
-                        p_default_schema               => 'ADMIN',
-                        p_allow_access_to_schemas      => 'ADMIN',
+                        p_default_schema               => :db_user,
+                        p_allow_access_to_schemas      => :db_user,
                         p_change_password_on_first_use => 'N'
                     );
                     COMMIT;
                 END;
-            """)
+            """, {'db_user': DB_USER})
             print("   ✅ APEX Admin user 'ATLAS_ADMIN' created")
         except oracledb.DatabaseError as e:
             error = str(e.args[0])
@@ -114,7 +97,7 @@ def main():
                 print(f"   ❌ Error creating user: {error}")
         
         # Create the Atlas APEX Application
-        print("\n4. Creating Atlas APEX Application...")
+        print("\n3. Creating Atlas APEX Application...")
         try:
             # First, set the workspace context
             cursor.execute("""
@@ -128,13 +111,11 @@ def main():
                 DECLARE
                     l_app_id NUMBER;
                 BEGIN
-                    l_app_id := APEX_APPLICATION_INSTALL.GET_APPLICATION_ID;
-                    
                     -- Create application
                     APEX_APPLICATION_INSTALL.SET_APPLICATION_ID(:app_id);
                     APEX_APPLICATION_INSTALL.SET_APPLICATION_NAME(:app_name);
                     APEX_APPLICATION_INSTALL.SET_APPLICATION_ALIAS(:app_alias);
-                    APEX_APPLICATION_INSTALL.SET_SCHEMA('ADMIN');
+                    APEX_APPLICATION_INSTALL.SET_SCHEMA(:db_user);
                     APEX_APPLICATION_INSTALL.SET_WORKSPACE_ID(:workspace_id);
                     
                     -- Generate application
@@ -146,17 +127,16 @@ def main():
                 'app_id': APP_ID,
                 'app_name': APP_NAME,
                 'app_alias': APP_ALIAS,
-                'workspace_id': WORKSPACE_ID
+                'workspace_id': WORKSPACE_ID,
+                'db_user': DB_USER
             })
             print(f"   ✅ Application '{APP_NAME}' (ID: {APP_ID}) created")
         except oracledb.DatabaseError as e:
             error = str(e.args[0])
             print(f"   ⚠️  Application creation note: {error[:100]}...")
         
-        # Create the Command Bar page items and process
-        print("\n5. Creating Command Bar Components...")
-        
         # Create a table to store command history
+        print("\n4. Creating Command History Table...")
         try:
             cursor.execute("""
                 CREATE TABLE ATLAS_COMMAND_HISTORY (
@@ -177,101 +157,21 @@ def main():
                 print(f"   ❌ Error: {e.args[0]}")
         
         # Create the NL-to-SQL function
-        print("\n6. Creating NL-to-SQL Processing Function...")
-        cursor.execute("""
-            CREATE OR REPLACE FUNCTION ATLAS_PROCESS_COMMAND(
-                p_command   IN VARCHAR2,
-                p_user_id   IN VARCHAR2 DEFAULT NULL
-            )
-            RETURN CLOB
-            IS
-                l_response      CLOB;
-                l_schema_ctx    CLOB;
-                l_validation    VARCHAR2(4000);
-                l_command_lower VARCHAR2(4000);
-            BEGIN
-                l_command_lower := LOWER(p_command);
-                
-                -- Get schema context
-                l_schema_ctx := ATLAS_GET_SCHEMA_CONTEXT();
-                
-                -- Simple keyword-based query generation for demonstration
-                -- In production, this would call OCI Generative AI
-                
-                IF INSTR(l_command_lower, 'employee') > 0 OR INSTR(l_command_lower, 'موظف') > 0 THEN
-                    IF INSTR(l_command_lower, 'count') > 0 OR INSTR(l_command_lower, 'عدد') > 0 OR INSTR(l_command_lower, 'كم') > 0 THEN
-                        l_response := '{"type":"query","sql":"SELECT COUNT(*) AS TOTAL_EMPLOYEES FROM ATLAS_EMPLOYEES","description":"Count of all employees"}';
-                    ELSE
-                        l_response := '{"type":"query","sql":"SELECT EMPLOYEE_ID, EMPLOYEE_NUMBER, FULL_NAME, JOB_TITLE, ASSIGNMENT_STATUS FROM ATLAS_EMPLOYEES ORDER BY FULL_NAME","description":"List of all employees"}';
-                    END IF;
-                    
-                ELSIF INSTR(l_command_lower, 'department') > 0 OR INSTR(l_command_lower, 'قسم') > 0 THEN
-                    l_response := '{"type":"query","sql":"SELECT DEPARTMENT_ID, DEPARTMENT_NAME FROM ATLAS_DEPARTMENTS ORDER BY DEPARTMENT_NAME","description":"List of all departments"}';
-                    
-                ELSIF INSTR(l_command_lower, 'supplier') > 0 OR INSTR(l_command_lower, 'مورد') > 0 THEN
-                    l_response := '{"type":"query","sql":"SELECT SUPPLIER_ID, SUPPLIER_NAME, SUPPLIER_NUMBER, STATUS FROM ATLAS_SUPPLIERS ORDER BY SUPPLIER_NAME","description":"List of all suppliers"}';
-                    
-                ELSIF INSTR(l_command_lower, 'invoice') > 0 OR INSTR(l_command_lower, 'فاتورة') > 0 THEN
-                    IF INSTR(l_command_lower, 'unpaid') > 0 OR INSTR(l_command_lower, 'overdue') > 0 OR INSTR(l_command_lower, 'متأخر') > 0 THEN
-                        l_response := '{"type":"query","sql":"SELECT INVOICE_ID, INVOICE_NUMBER, INVOICE_AMOUNT, DUE_DATE, PAYMENT_STATUS FROM ATLAS_AP_INVOICES WHERE PAYMENT_STATUS = ''UNPAID'' AND DUE_DATE < SYSDATE ORDER BY DUE_DATE","description":"Overdue unpaid invoices"}';
-                    ELSE
-                        l_response := '{"type":"query","sql":"SELECT INVOICE_ID, INVOICE_NUMBER, INVOICE_AMOUNT, PAYMENT_STATUS FROM ATLAS_AP_INVOICES ORDER BY INVOICE_DATE DESC","description":"List of all invoices"}';
-                    END IF;
-                    
-                ELSIF INSTR(l_command_lower, 'purchase order') > 0 OR INSTR(l_command_lower, 'po') > 0 OR INSTR(l_command_lower, 'طلب شراء') > 0 THEN
-                    l_response := '{"type":"query","sql":"SELECT PO_ID, PO_NUMBER, TOTAL_AMOUNT, STATUS FROM ATLAS_PURCHASE_ORDERS ORDER BY CREATION_DATE DESC","description":"List of all purchase orders"}';
-                    
-                ELSIF INSTR(l_command_lower, 'alert') > 0 OR INSTR(l_command_lower, 'تنبيه') > 0 THEN
-                    l_response := '{"type":"alerts","data":' || ATLAS_GET_ALERTS() || ',"description":"Current system alerts"}';
-                    
-                ELSIF INSTR(l_command_lower, 'schema') > 0 OR INSTR(l_command_lower, 'table') > 0 THEN
-                    l_response := '{"type":"schema","data":"' || REPLACE(REPLACE(l_schema_ctx, CHR(10), '\\n'), '"', '\\"') || '","description":"Available schema information"}';
-                    
-                ELSE
-                    l_response := '{"type":"help","message":"I can help you query: employees, departments, suppliers, invoices, purchase orders. Try asking: Show me all employees, or كم عدد الموظفين؟","description":"Help message"}';
-                END IF;
-                
-                -- Log the command
-                ATLAS_LOG_EVENT(
-                    p_event_type => 'COMMAND_PROCESSED',
-                    p_user_id => p_user_id,
-                    p_resource_type => 'COMMAND',
-                    p_action => 'PROCESS',
-                    p_details => '{"command":"' || SUBSTR(p_command, 1, 500) || '"}'
-                );
-                
-                RETURN l_response;
-                
-            EXCEPTION
-                WHEN OTHERS THEN
-                    ATLAS_LOG_EVENT(
-                        p_event_type => 'COMMAND_ERROR',
-                        p_user_id => p_user_id,
-                        p_resource_type => 'COMMAND',
-                        p_action => 'PROCESS',
-                        p_success => 'N',
-                        p_error_message => SQLERRM
-                    );
-                    RETURN '{"type":"error","message":"' || SQLERRM || '"}';
-            END ATLAS_PROCESS_COMMAND;
-        """)
-        connection.commit()
-        print("   ✅ ATLAS_PROCESS_COMMAND function created")
+        print("\n5. Creating NL-to-SQL Processing Function...")
+        # Read the content of atlas_nl_to_sql.sql
+        with open(os.path.join(os.path.dirname(__file__), "atlas_nl_to_sql.sql"), "r") as f:
+            nl_to_sql_content = f.read()
+            
+        # Split by '/' and execute
+        for stmt in nl_to_sql_content.split('/'):
+            if stmt.strip():
+                try:
+                    cursor.execute(stmt)
+                    connection.commit()
+                except oracledb.DatabaseError as e:
+                    print(f"   ❌ Error executing NL-to-SQL statement: {e.args[0]}")
         
-        # Test the command processor
-        print("\n7. Testing Command Processor...")
-        test_commands = [
-            ("Show me all employees", "English query"),
-            ("كم عدد الموظفين؟", "Arabic query"),
-            ("List unpaid invoices", "Invoice query"),
-            ("Show alerts", "Alerts query"),
-        ]
-        
-        for cmd, desc in test_commands:
-            cursor.execute("SELECT ATLAS_PROCESS_COMMAND(:1, 'TEST_USER') FROM DUAL", [cmd])
-            result = cursor.fetchone()[0]
-            result_str = result.read() if hasattr(result, 'read') else str(result)
-            print(f"   ✅ {desc}: {result_str[:80]}...")
+        print("   ✅ ATLAS_PROCESS_COMMAND_V2 function created")
         
         cursor.close()
         connection.close()
