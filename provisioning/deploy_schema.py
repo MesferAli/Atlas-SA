@@ -1,35 +1,54 @@
+#!/usr/bin/env python3
+"""
+Atlas on OCI - Database Schema Deployment Script
+Supports both mTLS (Wallet) and TLS (Walletless) connections
+"""
+
 import oracledb
 import os
 import sys
-import config
-
-# Load DDL from schema_ddl.sql
-with open(os.path.join(os.path.dirname(__file__), "schema_ddl.sql"), "r") as f:
-    schema_ddl_content = f.read()
-
-# Split DDL statements by ";" and filter out empty strings
-DDL_STATEMENTS = [stmt.strip() for stmt in schema_ddl_content.split(";") if stmt.strip()]
+from config import Config
 
 def main():
     print("=" * 60)
     print("Atlas on OCI - Schema Deployment")
     print("=" * 60)
     
-    # Configure wallet location
-    wallet_dir = os.path.expanduser(config.DB_WALLET_DIR)
-    print(f"\nConfiguring wallet from: {wallet_dir}")
+    # Load DDL from schema_ddl.sql
+    ddl_path = os.path.join(os.path.dirname(__file__), "schema_ddl.sql")
+    if not os.path.exists(ddl_path):
+        print(f"❌ Error: {ddl_path} not found")
+        return 1
+        
+    with open(ddl_path, "r") as f:
+        schema_ddl_content = f.read()
+
+    # Split DDL statements by ";" and filter out empty strings
+    DDL_STATEMENTS = [stmt.strip() for stmt in schema_ddl_content.split(";") if stmt.strip()]
     
     try:
-        # Connect to the database using wallet
+        # Connect to the database
         print(f"\nConnecting to ATP database...")
-        connection = oracledb.connect(
-            user=config.DB_USER,
-            password=config.DB_PASSWORD,
-            dsn=config.DB_DSN,
-            config_dir=wallet_dir,
-            wallet_location=wallet_dir,
-            wallet_password=config.DB_WALLET_PASSWORD
-        )
+        
+        if Config.USE_WALLET:
+            wallet_dir = os.path.expanduser(Config.DB_WALLET_PATH)
+            print(f"Using mTLS (Wallet) connection from: {wallet_dir}")
+            connection = oracledb.connect(
+                user=Config.DB_USER,
+                password=Config.DB_PASSWORD,
+                dsn=Config.DB_DSN,
+                config_dir=wallet_dir,
+                wallet_location=wallet_dir,
+                wallet_password=Config.DB_PASSWORD # Assuming wallet password is same as DB password
+            )
+        else:
+            print(f"Using Walletless TLS connection...")
+            connection = oracledb.connect(
+                user=Config.DB_USER,
+                password=Config.DB_PASSWORD,
+                dsn=Config.DB_DSN
+            )
+            
         print("✅ Connected successfully!")
         
         cursor = connection.cursor()
@@ -72,9 +91,9 @@ def main():
                 success_count += 1
             except oracledb.DatabaseError as e:
                 error = e.args[0]
-                if "ORA-00955" in str(error) or "ORA-02262" in str(error) or "ORA-00942" in str(error):  # Object already exists or table/view does not exist
+                if "ORA-00955" in str(error) or "ORA-02262" in str(error) or "ORA-00942" in str(error):
                     print(f"  [{i:02d}] ⚠️  {stmt_type} {obj_name} (already exists or dependency issue)")
-                    success_count += 1 # Consider it a success if it already exists
+                    success_count += 1
                 else:
                     print(f"  [{i:02d}] ❌ {stmt_type} {obj_name}: {error}")
                     error_count += 1

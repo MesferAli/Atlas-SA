@@ -4,8 +4,18 @@ class Config:
     # OCI Database Connection
     DB_USER = os.getenv("DB_USER", "ADMIN")
     DB_PASSWORD = os.getenv("DB_PASSWORD", "AtlasMZX#2026Secure!")
-    DB_DSN = os.getenv("DB_DSN", "atlasdb_high")
+    
+    # mTLS Connection (Requires Wallet)
+    DB_DSN_MTLS = os.getenv("DB_DSN_MTLS", "atlasdb_high")
+    
+    # Walletless TLS Connection (Recommended by Oracle)
+    DB_DSN_TLS = os.getenv("DB_DSN_TLS", "(description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.me-riyadh-1.oraclecloud.com))(connect_data=(service_name=g05fa28d854c5e8_atlasdb_high.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))")
+    
+    # Default connection to use (Switch to DB_DSN_MTLS if wallet is required)
+    DB_DSN = os.getenv("DB_DSN", DB_DSN_TLS)
+    
     DB_WALLET_PATH = os.getenv("DB_WALLET_PATH", "/home/ubuntu/atlas_wallet")
+    USE_WALLET = os.getenv("USE_WALLET", "False").lower() == "true"
 
     # OCI Generative AI
     OCI_GENAI_ENDPOINT = os.getenv("OCI_GENAI_ENDPOINT", "https://inference.generativeai.me-riyadh-1.oci.oraclecloud.com")

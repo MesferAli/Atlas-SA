@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-This report confirms the successful deployment and security verification of the **Atlas on OCI** project in the `me-riyadh-1` region, in accordance with the MZX Deployment Order. All infrastructure has been provisioned, the database schema and intelligence layers are active, and the APEX interface is configured. 
+This report confirms the successful deployment and security verification of the **Atlas on OCI** project in the `me-riyadh-1` region, in accordance with the MZX Deployment Order. All infrastructure has been provisioned, the database schema and intelligence layers are active, and the APEX interface is configured. **Important Update: Following Oracle's recommendation, the project now prioritizes Walletless TLS connections for Autonomous Database for enhanced security and future compatibility.** 
 
 Crucially, all security mandates have been verified, with a **100% pass rate** on all tests, including the critical read-only enforcement for Oracle Fusion data.
 
@@ -67,4 +67,4 @@ The `ATLAS_VALIDATE_QUERY` function was rigorously tested and confirmed to block
 
 ## 5. Final Sign-Off
 
-All phases of the deployment have been successfully completed and verified against the specified requirements. The Atlas on OCI system is now operational and ready for use.
+All phases of the deployment have been successfully completed and verified against the specified requirements. The Atlas on OCI system is now operational and ready for use. The mTLS wallet has been refreshed to ensure compliance with DigiCert's G2 root certificates, effective April 15, 2026.
