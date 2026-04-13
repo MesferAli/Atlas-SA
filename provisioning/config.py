@@ -15,7 +15,13 @@ class Config:
     DB_DSN = os.getenv("DB_DSN", DB_DSN_TLS)
     
     DB_WALLET_PATH = os.getenv("DB_WALLET_PATH", "/home/ubuntu/atlas_wallet")
+    # Alias used by deploy_fusion_integration.py / deploy_rag_pipeline.py / setup_apex.py
+    DB_WALLET_DIR = os.getenv("DB_WALLET_DIR", DB_WALLET_PATH)
+    DB_WALLET_PASSWORD = os.getenv("DB_WALLET_PASSWORD", "")
     USE_WALLET = os.getenv("USE_WALLET", "False").lower() == "true"
+
+    # OCI Region (used to build APEX/ORDS URLs in setup_apex.py)
+    OCI_REGION = os.getenv("OCI_REGION", "me-riyadh-1")
 
     # OCI Generative AI
     OCI_GENAI_ENDPOINT = os.getenv("OCI_GENAI_ENDPOINT", "https://inference.generativeai.me-riyadh-1.oci.oraclecloud.com")
