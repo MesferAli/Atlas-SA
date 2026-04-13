@@ -13,11 +13,30 @@ END ATLAS_FUSION_SYNC_PKG;
 
 CREATE OR REPLACE PACKAGE BODY ATLAS_FUSION_SYNC_PKG AS
 
+    -- Build a JSON header blob containing an HTTP Basic auth header for
+    -- Fusion. Kept as a private helper so all three sync procedures share
+    -- the same encoding logic.
+    FUNCTION BUILD_FUSION_AUTH_HEADERS(
+        p_user     IN VARCHAR2,
+        p_password IN VARCHAR2
+    ) RETURN CLOB
+    IS
+        l_encoded VARCHAR2(4000);
+    BEGIN
+        l_encoded := UTL_RAW.CAST_TO_VARCHAR2(
+            UTL_ENCODE.BASE64_ENCODE(
+                UTL_RAW.CAST_TO_RAW(p_user || ':' || p_password)
+            )
+        );
+        RETURN '{"Authorization": "Basic ' || l_encoded || '"}';
+    END BUILD_FUSION_AUTH_HEADERS;
+
     PROCEDURE SYNC_EMPLOYEES IS
-        l_fusion_url VARCHAR2(1000) := ATLAS_CONFIG_PKG.GET_FUSION_BASE_URL || 
+        l_fusion_url VARCHAR2(1000) := ATLAS_CONFIG_PKG.GET_FUSION_BASE_URL ||
                                         '/hcmRestApi/latest/workers';
         l_fusion_user VARCHAR2(200) := ATLAS_CONFIG_PKG.GET_FUSION_USER;
-        l_fusion_password VARCHAR2(200) := ATLAS_CONFIG_PKG.GET_FUSION_PASSWORD; -- Assuming this will be added to config
+        l_fusion_password VARCHAR2(200) := ATLAS_CONFIG_PKG.GET_FUSION_PASSWORD;
+        l_headers CLOB := BUILD_FUSION_AUTH_HEADERS(l_fusion_user, l_fusion_password);
         l_response CLOB;
         l_status_code NUMBER;
     BEGIN
@@ -27,17 +46,18 @@ CREATE OR REPLACE PACKAGE BODY ATLAS_FUSION_SYNC_PKG AS
             p_action => 'SYNC'
         );
 
-        -- Make HTTP call to Fusion
-        ATLAS_HTTP_UTILS_PKG.MAKE_REQUEST(
-            p_url => l_fusion_url,
-            p_method => 'GET',
-            p_username => l_fusion_user,
-            p_password => l_fusion_password,
-            p_response => l_response,
-            p_status_code => l_status_code
+        -- Make HTTP call to Fusion. ATLAS_HTTP_UTILS_PKG.MAKE_REQUEST is a
+        -- function returning the response body (or NULL on failure); the
+        -- HTTP status from the most recent call is read separately from
+        -- APEX_WEB_SERVICE so we can still log it for diagnostics.
+        l_response := ATLAS_HTTP_UTILS_PKG.MAKE_REQUEST(
+            p_url     => l_fusion_url,
+            p_method  => 'GET',
+            p_headers => l_headers
         );
+        l_status_code := APEX_WEB_SERVICE.GET_STATUS_CODE;
 
-        IF l_status_code = 200 THEN
+        IF l_response IS NOT NULL AND l_status_code BETWEEN 200 AND 299 THEN
             -- Parse JSON and insert/update into ATLAS_EMPLOYEES
             FOR rec IN (
                 SELECT employee_id, employee_number, full_name, job_title, department_id, location_id, hire_date, assignment_status, manager_id
@@ -99,10 +119,11 @@ CREATE OR REPLACE PACKAGE BODY ATLAS_FUSION_SYNC_PKG AS
     END SYNC_EMPLOYEES;
 
     PROCEDURE SYNC_AP_INVOICES IS
-        l_fusion_url VARCHAR2(1000) := ATLAS_CONFIG_PKG.GET_FUSION_BASE_URL || 
+        l_fusion_url VARCHAR2(1000) := ATLAS_CONFIG_PKG.GET_FUSION_BASE_URL ||
                                         '/fscmRestApi/latest/invoices';
         l_fusion_user VARCHAR2(200) := ATLAS_CONFIG_PKG.GET_FUSION_USER;
         l_fusion_password VARCHAR2(200) := ATLAS_CONFIG_PKG.GET_FUSION_PASSWORD;
+        l_headers CLOB := BUILD_FUSION_AUTH_HEADERS(l_fusion_user, l_fusion_password);
         l_response CLOB;
         l_status_code NUMBER;
     BEGIN
@@ -112,16 +133,14 @@ CREATE OR REPLACE PACKAGE BODY ATLAS_FUSION_SYNC_PKG AS
             p_action => 'SYNC'
         );
 
-        ATLAS_HTTP_UTILS_PKG.MAKE_REQUEST(
-            p_url => l_fusion_url,
-            p_method => 'GET',
-            p_username => l_fusion_user,
-            p_password => l_fusion_password,
-            p_response => l_response,
-            p_status_code => l_status_code
+        l_response := ATLAS_HTTP_UTILS_PKG.MAKE_REQUEST(
+            p_url     => l_fusion_url,
+            p_method  => 'GET',
+            p_headers => l_headers
         );
+        l_status_code := APEX_WEB_SERVICE.GET_STATUS_CODE;
 
-        IF l_status_code = 200 THEN
+        IF l_response IS NOT NULL AND l_status_code BETWEEN 200 AND 299 THEN
             FOR rec IN (
                 SELECT invoice_id, supplier_id, invoice_date, invoice_amount, amount_paid, payment_status, currency_code, due_date
                 FROM JSON_TABLE(l_response, '$.items[*]' COLUMNS (
@@ -181,10 +200,11 @@ CREATE OR REPLACE PACKAGE BODY ATLAS_FUSION_SYNC_PKG AS
     END SYNC_AP_INVOICES;
 
     PROCEDURE SYNC_PURCHASE_ORDERS IS
-        l_fusion_url VARCHAR2(1000) := ATLAS_CONFIG_PKG.GET_FUSION_BASE_URL || 
+        l_fusion_url VARCHAR2(1000) := ATLAS_CONFIG_PKG.GET_FUSION_BASE_URL ||
                                         '/fscmRestApi/latest/purchaseOrders';
         l_fusion_user VARCHAR2(200) := ATLAS_CONFIG_PKG.GET_FUSION_USER;
         l_fusion_password VARCHAR2(200) := ATLAS_CONFIG_PKG.GET_FUSION_PASSWORD;
+        l_headers CLOB := BUILD_FUSION_AUTH_HEADERS(l_fusion_user, l_fusion_password);
         l_response CLOB;
         l_status_code NUMBER;
     BEGIN
@@ -194,16 +214,14 @@ CREATE OR REPLACE PACKAGE BODY ATLAS_FUSION_SYNC_PKG AS
             p_action => 'SYNC'
         );
 
-        ATLAS_HTTP_UTILS_PKG.MAKE_REQUEST(
-            p_url => l_fusion_url,
-            p_method => 'GET',
-            p_username => l_fusion_user,
-            p_password => l_fusion_password,
-            p_response => l_response,
-            p_status_code => l_status_code
+        l_response := ATLAS_HTTP_UTILS_PKG.MAKE_REQUEST(
+            p_url     => l_fusion_url,
+            p_method  => 'GET',
+            p_headers => l_headers
         );
+        l_status_code := APEX_WEB_SERVICE.GET_STATUS_CODE;
 
-        IF l_status_code = 200 THEN
+        IF l_response IS NOT NULL AND l_status_code BETWEEN 200 AND 299 THEN
             FOR rec IN (
                 SELECT po_header_id, supplier_id, order_date, total_amount, status
                 FROM JSON_TABLE(l_response, '$.items[*]' COLUMNS (

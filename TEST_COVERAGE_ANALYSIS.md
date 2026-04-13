@@ -37,10 +37,9 @@ All six Python deployment scripts have no tests at all:
 | `provisioning/setup_apex.py` | Sets up APEX workspace and application | References non-existent config properties (`DB_WALLET_DIR`, `OCI_REGION`) |
 | `provisioning/security_verification.py` | Runs security mandate checks | Verification script that is itself unverified |
 
-**Specific bugs found during this analysis:**
-- `deploy_fusion_integration.py` references `config.DB_WALLET_DIR` and `config.DB_WALLET_PASSWORD` which do not exist in `config.py`
-- `setup_apex.py` references `config.DB_WALLET_DIR`, `config.DB_WALLET_PASSWORD`, and `config.OCI_REGION` which do not exist in `config.py`
-- These would cause `AttributeError` at runtime
+**Specific bugs found during this analysis (all fixed in this PR):**
+- `deploy_fusion_integration.py`, `deploy_rag_pipeline.py`, and `setup_apex.py` all referenced `config.DB_WALLET_DIR`, `config.DB_WALLET_PASSWORD`, and (in one case) `config.OCI_REGION`, none of which existed in `config.py`. Any invocation raised `AttributeError` at import time. The attributes are now defined on `Config` and a regression test in `provisioning/tests/test_config.py` AST-scans every sibling script and asserts that referenced attributes exist.
+- `fusion_sync_integration.sql` called `ATLAS_HTTP_UTILS_PKG.MAKE_REQUEST` with `p_username`, `p_password`, `p_response`, `p_status_code` — none of which match the real signature. The package would have failed to compile. All three call sites now use the actual signature (URL/method/headers, function return value, `APEX_WEB_SERVICE.GET_STATUS_CODE` for status), and a shared `BUILD_FUSION_AUTH_HEADERS` helper builds the Basic auth header.
 
 ### 2. CRITICAL: SQL Packages — Zero Coverage
 
@@ -53,8 +52,8 @@ Eight SQL packages define the core business logic with no automated testing:
 | `atlas_intelligence_pkg.sql` | Proactive business alerts | Alert thresholds and detection logic untested |
 | `atlas_nl_to_sql.sql` | Natural language → SQL conversion | SQL injection via GenAI response untested |
 | `atlas_rag_pkg.sql` | RAG pipeline (embed, search, query) | Document chunking and vector search untested |
-| `atlas_vector_utils.sql` | Vector embeddings and similarity search | `SEARCH_SIMILAR_DOCUMENTS` is a **placeholder** (not implemented) |
-| `fusion_sync_integration.sql` | Fusion data sync (HR, AP, PO) | `MAKE_REQUEST` call signature **does not match** `ATLAS_HTTP_UTILS_PKG` — would fail at runtime |
+| `atlas_vector_utils.sql` | Vector embeddings and similarity search | `SEARCH_SIMILAR_DOCUMENTS` is now implemented but cosine scoring and top-K selection have no fixture-based tests |
+| `fusion_sync_integration.sql` | Fusion data sync (HR, AP, PO) | Sync MERGE logic and JSON parsing are untested; previous `MAKE_REQUEST` signature mismatch was fixed in this PR |
 | `schema_ddl.sql` | Table/index/sequence DDL | No validation that schema matches code expectations |
 
 ### 3. HIGH: SDK Core Infrastructure — Minimal Coverage
@@ -92,11 +91,11 @@ The current waiter tests and basic API call tests require live OCI infrastructur
 
 ### Priority 1 — Fix Broken Code Discovered During Analysis
 
-These are not test improvements but bugs found because of missing tests:
+These are not test improvements but bugs found because of missing tests. Items 1 and 2 were addressed in the same PR that introduced this analysis:
 
-1. **Fix `config.py` missing attributes**: Add `DB_WALLET_DIR`, `DB_WALLET_PASSWORD`, and `OCI_REGION` properties or fix the scripts that reference them
-2. **Fix `fusion_sync_integration.sql`**: The `MAKE_REQUEST` call uses parameters (`p_username`, `p_password`, `p_response`, `p_status_code`) that don't match `ATLAS_HTTP_UTILS_PKG.MAKE_REQUEST()`
-3. **Implement `atlas_vector_utils.sql` `SEARCH_SIMILAR_DOCUMENTS`**: Currently a placeholder returning empty results
+1. ~~**Fix `config.py` missing attributes**: Add `DB_WALLET_DIR`, `DB_WALLET_PASSWORD`, and `OCI_REGION` properties or fix the scripts that reference them~~ — **done**, with a regression test in `provisioning/tests/test_config.py`
+2. ~~**Fix `fusion_sync_integration.sql`**: The `MAKE_REQUEST` call uses parameters (`p_username`, `p_password`, `p_response`, `p_status_code`) that don't match `ATLAS_HTTP_UTILS_PKG.MAKE_REQUEST()`~~ — **done**, all three call sites now use the real signature
+3. ~~**Implement `atlas_vector_utils.sql` `SEARCH_SIMILAR_DOCUMENTS`**: Currently a placeholder returning empty results~~ — already implemented; needs fixture-based tests for cosine scoring and top-K selection
 
 ### Priority 2 — Provisioning Script Unit Tests
 
