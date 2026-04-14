@@ -10,11 +10,16 @@ import sys
 import json
 from datetime import datetime
 
-# Database connection parameters
-DB_USER = "ADMIN"
-DB_PASSWORD = "AtlasMZX#2026Secure!"
-DB_DSN = "atlasdb_high"
-WALLET_DIR = os.path.expanduser("~/atlas_wallet")
+from config import Config
+
+# Resolve the report output path relative to the repo root so the script
+# works from any checkout. The previous hard-coded ``/home/ubuntu/atlas_oci``
+# path only existed on the original provisioning VM and caused the script to
+# fail with ``FileNotFoundError`` on every other machine.
+REPORT_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "security_verification_report.json",
+)
 
 def main():
     print("=" * 70)
@@ -36,14 +41,24 @@ def main():
     
     try:
         print(f"\nConnecting to ATP database...")
-        connection = oracledb.connect(
-            user=DB_USER,
-            password=DB_PASSWORD,
-            dsn=DB_DSN,
-            config_dir=WALLET_DIR,
-            wallet_location=WALLET_DIR,
-            wallet_password="WalletMZX#2026!"
-        )
+        if Config.USE_WALLET:
+            wallet_dir = os.path.expanduser(Config.DB_WALLET_DIR)
+            print(f"Using mTLS (Wallet) connection from: {wallet_dir}")
+            connection = oracledb.connect(
+                user=Config.DB_USER,
+                password=Config.DB_PASSWORD,
+                dsn=Config.DB_DSN,
+                config_dir=wallet_dir,
+                wallet_location=wallet_dir,
+                wallet_password=Config.DB_WALLET_PASSWORD or Config.DB_PASSWORD,
+            )
+        else:
+            print("Using Walletless TLS connection...")
+            connection = oracledb.connect(
+                user=Config.DB_USER,
+                password=Config.DB_PASSWORD,
+                dsn=Config.DB_DSN,
+            )
         print("✅ Connected successfully!\n")
         
         cursor = connection.cursor()
@@ -303,10 +318,10 @@ def main():
         print("\n" + "=" * 70)
         
         # Save results to JSON
-        with open("/home/ubuntu/atlas_oci/security_verification_report.json", "w") as f:
+        with open(REPORT_PATH, "w") as f:
             json.dump(results, f, indent=2)
-        
-        print(f"\n📄 Full report saved to: /home/ubuntu/atlas_oci/security_verification_report.json")
+
+        print(f"\n📄 Full report saved to: {REPORT_PATH}")
         
         return 0 if failed == 0 else 1
         
