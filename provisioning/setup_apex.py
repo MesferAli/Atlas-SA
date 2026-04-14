@@ -7,18 +7,18 @@ Creates the APEX workspace and deploys the Atlas application
 import oracledb
 import os
 import sys
-import config
+from config import Config
 
 # Database connection parameters from config.py
-DB_USER = config.DB_USER
-DB_PASSWORD = config.DB_PASSWORD
-DB_DSN = config.DB_DSN
-WALLET_DIR = os.path.expanduser(config.DB_WALLET_DIR)
-WALLET_PASSWORD = config.DB_WALLET_PASSWORD
+DB_USER = Config.DB_USER
+DB_PASSWORD = Config.DB_PASSWORD
+DB_DSN = Config.DB_DSN
+WALLET_DIR = os.path.expanduser(Config.DB_WALLET_DIR)
+WALLET_PASSWORD = Config.DB_WALLET_PASSWORD
 
 # APEX URLs
-APEX_URL = f"https://{config.DB_DSN.upper()}.adb.{config.OCI_REGION}.oraclecloudapps.com/ords/apex"
-ORDS_URL = f"https://{config.DB_DSN.upper()}.adb.{config.OCI_REGION}.oraclecloudapps.com/ords/"
+APEX_URL = f"https://{Config.DB_DSN.upper()}.adb.{Config.OCI_REGION}.oraclecloudapps.com/ords/apex"
+ORDS_URL = f"https://{Config.DB_DSN.upper()}.adb.{Config.OCI_REGION}.oraclecloudapps.com/ords/"
 
 # APEX Workspace and Application Configuration
 WORKSPACE_NAME = "ATLAS"

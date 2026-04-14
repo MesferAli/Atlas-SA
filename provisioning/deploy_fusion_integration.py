@@ -1,27 +1,27 @@
 import oracledb
 import os
 import sys
-import config
+from config import Config
 
 def main():
     print("=" * 60)
     print("Atlas on OCI - Fusion Integration Deployment")
     print("=" * 60)
-    
+
     # Configure wallet location
-    wallet_dir = os.path.expanduser(config.DB_WALLET_DIR)
+    wallet_dir = os.path.expanduser(Config.DB_WALLET_DIR)
     print(f"\nConfiguring wallet from: {wallet_dir}")
-    
+
     try:
         # Connect to the database using wallet
         print(f"\nConnecting to ATP database...")
         connection = oracledb.connect(
-            user=config.DB_USER,
-            password=config.DB_PASSWORD,
-            dsn=config.DB_DSN,
+            user=Config.DB_USER,
+            password=Config.DB_PASSWORD,
+            dsn=Config.DB_DSN,
             config_dir=wallet_dir,
             wallet_location=wallet_dir,
-            wallet_password=config.DB_WALLET_PASSWORD
+            wallet_password=Config.DB_WALLET_PASSWORD
         )
         print("✅ Connected successfully!")
         
