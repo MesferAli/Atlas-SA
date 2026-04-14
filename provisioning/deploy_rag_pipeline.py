@@ -1,14 +1,14 @@
 import oracledb
 import os
 import sys
-import config
+from config import Config
 
 # Database connection parameters from config.py
-DB_USER = config.DB_USER
-DB_PASSWORD = config.DB_PASSWORD
-DB_DSN = config.DB_DSN
-WALLET_DIR = os.path.expanduser(config.DB_WALLET_DIR)
-WALLET_PASSWORD = config.DB_WALLET_PASSWORD
+DB_USER = Config.DB_USER
+DB_PASSWORD = Config.DB_PASSWORD
+DB_DSN = Config.DB_DSN
+WALLET_DIR = os.path.expanduser(Config.DB_WALLET_DIR)
+WALLET_PASSWORD = Config.DB_WALLET_PASSWORD
 
 # PL/SQL objects for the RAG pipeline and audit logging
 PLSQL_OBJECTS = [
