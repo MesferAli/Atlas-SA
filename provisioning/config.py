@@ -33,6 +33,23 @@ class Config:
     FUSION_USER = os.getenv("FUSION_USER", "mesfer@xcyrcle.co")
     FUSION_PASSWORD = os.getenv("FUSION_PASSWORD", "AtlasMZX#2026Secure!")
 
+    # Oracle E-Business Suite Integration
+    # Atlas can sync from Fusion (REST) or EBS (DB link / ISG REST). Toggle the
+    # source via ATLAS_SOURCE_SYSTEM ("FUSION" or "EBS"). When EBS is selected,
+    # the default integration mode is DBLINK against the APPS schema; switch to
+    # "ISG" to call EBS Integrated SOA Gateway REST endpoints instead.
+    ATLAS_SOURCE_SYSTEM = os.getenv("ATLAS_SOURCE_SYSTEM", "FUSION")
+    EBS_INTEGRATION_MODE = os.getenv("EBS_INTEGRATION_MODE", "DBLINK")
+    EBS_DB_LINK = os.getenv("EBS_DB_LINK", "EBS_PROD")
+    EBS_APPS_SCHEMA = os.getenv("EBS_APPS_SCHEMA", "APPS")
+    EBS_BUSINESS_GROUP_ID = os.getenv("EBS_BUSINESS_GROUP_ID", "0")
+    EBS_LEDGER_ID = os.getenv("EBS_LEDGER_ID", "0")
+    EBS_ORG_ID = os.getenv("EBS_ORG_ID", "0")
+    # ISG (Integrated SOA Gateway) — only used when EBS_INTEGRATION_MODE=ISG
+    EBS_ISG_BASE_URL = os.getenv("EBS_ISG_BASE_URL", "")
+    EBS_ISG_USER = os.getenv("EBS_ISG_USER", "")
+    EBS_ISG_PASSWORD = os.getenv("EBS_ISG_PASSWORD", "")
+
     # OCI API Gateway
     API_GATEWAY_ENDPOINT = os.getenv("API_GATEWAY_ENDPOINT", "https://jpopcryemdv3rdlu4j63tmd5cm.apigateway.me-riyadh-1.oci.customer-oci.com/atlas/v1")
 
